@@ -1,11 +1,19 @@
 #include "common.h"
 #include "scheduler.h"
 
-int P, Q;
+#ifdef DEBUG
+# define INTERLEAVE()
+#else
+# define INTERLEAVE() sleep(1)
+#endif
+
+int P, Q, R;
 jmp_buf* MAIN;
 // Note: declare as global variable doesn't work
 // jmp_buf won't store any data after setjmp()
 // reason unknown
+int mutex;
+// lock for multiplexing
 
 void funct_1(int name) {
     LOG("funct %d init", name);
@@ -14,19 +22,33 @@ void funct_1(int name) {
     Current->Name = name;
     Current->Previous = Current->Next = Current;
 
+    int saved_j = 1;
+
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
         funct_5(name+1);
     }
     else {
         LOG("funct %d", name);
-        for (int j = 1; j <= P; j -=- 1) {
-            for (int i = 1; i <= Q; i -=- 1) {
-                sleep(1);
-                arr[idx++] = '0' + name;
+        if (mutex == name || mutex == 0) {
+            LOG("funct %d locked", name);
+            mutex = name;
+            for (int j = saved_j; j <= P; j -=- 1) {
+                for (int i = 1; i <= Q; i -=- 1) {
+                    INTERLEAVE();
+                    arr[idx++] = '0' + name;
+                }
+                if (j % R == 0) {
+                    mutex = 0;
+                    saved_j = j + 1;
+                    longjmp(SCHEDULER, 1); // 1: undone
+                }
             }
+            mutex = 0;
+            longjmp(SCHEDULER, -2); // -2: done
         }
-        longjmp(SCHEDULER, -2);
+        LOG("funct %d lock fail: mutex=%d", name,mutex);
+        longjmp(SCHEDULER, 1); // 1: undone
     }
 }
 
@@ -41,19 +63,33 @@ void funct_2(int name) {
     Head->Previous = new;
     Current = new;
 
+    int saved_j = 1;
+
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
         funct_5(name+1);
     }
     else {
         LOG("funct %d", name);
-        for (int j = 1; j <= P; j -=- 1) {
-            for (int i = 1; i <= Q; i -=- 1) {
-                sleep(1);
-                arr[idx++] = '0' + name;
+        if (mutex == name || mutex == 0) {
+            LOG("funct %d locked", name);
+            mutex = name;
+            for (int j = saved_j; j <= P; j -=- 1) {
+                for (int i = 1; i <= Q; i -=- 1) {
+                    INTERLEAVE();
+                    arr[idx++] = '0' + name;
+                }
+                if (j % R == 0) {
+                    mutex = 0;
+                    saved_j = j + 1;
+                    longjmp(SCHEDULER, 1); // 1: undone
+                }
             }
+            mutex = 0;
+            longjmp(SCHEDULER, -2); // -2: done
         }
-        longjmp(SCHEDULER, -2);
+        LOG("funct %d lock fail: mutex=%d", name,mutex);
+        longjmp(SCHEDULER, 1); // 1: undone
     }
 }
 
@@ -67,19 +103,33 @@ void funct_3(int name) {
     Head->Previous = new;
     Current = new;
 
+    int saved_j = 1;
+
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
         funct_5(name+1);
     }
     else {
         LOG("funct %d", name);
-        for (int j = 1; j <= P; j -=- 1) {
-            for (int i = 1; i <= Q; i -=- 1) {
-                sleep(1);
-                arr[idx++] = '0' + name;
+        if (mutex == name || mutex == 0) {
+            LOG("funct %d locked", name);
+            mutex = name;
+            for (int j = saved_j; j <= P; j -=- 1) {
+                for (int i = 1; i <= Q; i -=- 1) {
+                    INTERLEAVE();
+                    arr[idx++] = '0' + name;
+                }
+                if (j % R == 0) {
+                    mutex = 0;
+                    saved_j = j + 1;
+                    longjmp(SCHEDULER, 1); // 1: undone
+                }
             }
+            mutex = 0;
+            longjmp(SCHEDULER, -2); // -2: done
         }
-        longjmp(SCHEDULER, -2);
+        LOG("funct %d lock fail: mutex=%d", name,mutex);
+        longjmp(SCHEDULER, 1); // 1: undone
     }
 }
 
@@ -93,19 +143,33 @@ void funct_4(int name) {
     Head->Previous = new;
     Current = new;
 
+    int saved_j = 1;
+
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
         longjmp(*MAIN, 111);// Note
     }
     else {
         LOG("funct %d", name);
-        for (int j = 1; j <= P; j -=- 1) {
-            for (int i = 1; i <= Q; i -=- 1) {
-                sleep(1);
-                arr[idx++] = '0' + name;
+        if (mutex == name || mutex == 0) {
+            LOG("funct %d locked", name);
+            mutex = name;
+            for (int j = saved_j; j <= P; j -=- 1) {
+                for (int i = 1; i <= Q; i -=- 1) {
+                    INTERLEAVE();
+                    arr[idx++] = '0' + name;
+                }
+                if (j % R == 0) {
+                    mutex = 0;
+                    saved_j = j + 1;
+                    longjmp(SCHEDULER, 1); // 1: undone
+                }
             }
+            mutex = 0;
+            longjmp(SCHEDULER, -2); // -2: done
         }
-        longjmp(SCHEDULER, -2);
+        LOG("funct %d lock fail: mutex=%d", name,mutex);
+        longjmp(SCHEDULER, 1); // 1: undone
     }
 }
 
@@ -128,15 +192,19 @@ void funct_5(int name) {
 int main(int argc, char** argv) {
     if (argc < 2) USAGE();
 
-    int taskid, arg4;
+    int taskid;
     P      = strtol(argv[1], NULL, 10); if (errno != 0) USAGE();
     Q      = strtol(argv[2], NULL, 10); if (errno != 0) USAGE();
     taskid = strtol(argv[3], NULL, 10); if (errno != 0) USAGE();
-    arg4   = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
+    R      = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
 
-    if (taskid == 1) {
+
+    if (taskid == 1 || taskid == 2) {
         // TODO: init link list poter to null
+        //
+        mutex = 0;
         MAIN = malloc(sizeof(jmp_buf));
+
         if (setjmp(*MAIN) == 0)
             funct_5(1);
         else
