@@ -7,13 +7,46 @@
 # define INTERLEAVE() sleep(1)
 #endif
 
-int P, Q, R;
+#define SIGUSR3 SIGWINCH
+#define ACK 'A'
+
+// parameter for longjmp to scheduler
+#define S_DONE (-2) // task is done
+#define S_CTX  (1)  // context switch
+#define S_OCP  (2)  // lock failed, occupied
+#define S_CONT (3)  // back to current function
+
 jmp_buf* MAIN;
 // Note: declare as global variable doesn't work
 // jmp_buf won't store any data after setjmp()
 // reason unknown
-int mutex;
-// lock for multiplexing
+
+int P, Q, R;
+int T; // which task
+
+int mutex; // lock for multiplexing
+
+#define WAITQ_SIZE 10
+FCB_ptr _waitQ[10];
+int _waitQh, _waitQt; // head, tail
+
+void waitQ_push(FCB_ptr p) {
+    LOG("push FCB %d",p->Name);
+    _waitQ[_waitQt++] = p;
+    if (_waitQt >= WAITQ_SIZE) _waitQt = 0;
+}
+
+FCB_ptr waitQ_pop() {
+    FCB_ptr p = _waitQ[_waitQh++];
+    LOG("pop FCB %d",p->Name);
+    if (_waitQt >= WAITQ_SIZE) _waitQh = 0;
+    return p;
+}
+
+int waitQ_count() {
+    if (_waitQh <= _waitQt) return _waitQt - _waitQh;
+    else return _waitQt - _waitQh + WAITQ_SIZE;
+}
 
 void funct_1(int name) {
     LOG("funct %d init", name);
@@ -29,26 +62,7 @@ void funct_1(int name) {
         funct_5(name+1);
     }
     else {
-        LOG("funct %d", name);
-        if (mutex == name || mutex == 0) {
-            LOG("funct %d locked", name);
-            mutex = name;
-            for (int j = saved_j; j <= P; j -=- 1) {
-                for (int i = 1; i <= Q; i -=- 1) {
-                    INTERLEAVE();
-                    arr[idx++] = '0' + name;
-                }
-                if (j % R == 0) {
-                    mutex = 0;
-                    saved_j = j + 1;
-                    longjmp(SCHEDULER, 1); // 1: undone
-                }
-            }
-            mutex = 0;
-            longjmp(SCHEDULER, -2); // -2: done
-        }
-        LOG("funct %d lock fail: mutex=%d", name,mutex);
-        longjmp(SCHEDULER, 1); // 1: undone
+#include "funct_frag.h"
     }
 }
 
@@ -70,26 +84,7 @@ void funct_2(int name) {
         funct_5(name+1);
     }
     else {
-        LOG("funct %d", name);
-        if (mutex == name || mutex == 0) {
-            LOG("funct %d locked", name);
-            mutex = name;
-            for (int j = saved_j; j <= P; j -=- 1) {
-                for (int i = 1; i <= Q; i -=- 1) {
-                    INTERLEAVE();
-                    arr[idx++] = '0' + name;
-                }
-                if (j % R == 0) {
-                    mutex = 0;
-                    saved_j = j + 1;
-                    longjmp(SCHEDULER, 1); // 1: undone
-                }
-            }
-            mutex = 0;
-            longjmp(SCHEDULER, -2); // -2: done
-        }
-        LOG("funct %d lock fail: mutex=%d", name,mutex);
-        longjmp(SCHEDULER, 1); // 1: undone
+#include "funct_frag.h"
     }
 }
 
@@ -110,26 +105,7 @@ void funct_3(int name) {
         funct_5(name+1);
     }
     else {
-        LOG("funct %d", name);
-        if (mutex == name || mutex == 0) {
-            LOG("funct %d locked", name);
-            mutex = name;
-            for (int j = saved_j; j <= P; j -=- 1) {
-                for (int i = 1; i <= Q; i -=- 1) {
-                    INTERLEAVE();
-                    arr[idx++] = '0' + name;
-                }
-                if (j % R == 0) {
-                    mutex = 0;
-                    saved_j = j + 1;
-                    longjmp(SCHEDULER, 1); // 1: undone
-                }
-            }
-            mutex = 0;
-            longjmp(SCHEDULER, -2); // -2: done
-        }
-        LOG("funct %d lock fail: mutex=%d", name,mutex);
-        longjmp(SCHEDULER, 1); // 1: undone
+#include "funct_frag.h"
     }
 }
 
@@ -150,26 +126,7 @@ void funct_4(int name) {
         longjmp(*MAIN, 111);// Note
     }
     else {
-        LOG("funct %d", name);
-        if (mutex == name || mutex == 0) {
-            LOG("funct %d locked", name);
-            mutex = name;
-            for (int j = saved_j; j <= P; j -=- 1) {
-                for (int i = 1; i <= Q; i -=- 1) {
-                    INTERLEAVE();
-                    arr[idx++] = '0' + name;
-                }
-                if (j % R == 0) {
-                    mutex = 0;
-                    saved_j = j + 1;
-                    longjmp(SCHEDULER, 1); // 1: undone
-                }
-            }
-            mutex = 0;
-            longjmp(SCHEDULER, -2); // -2: done
-        }
-        LOG("funct %d lock fail: mutex=%d", name,mutex);
-        longjmp(SCHEDULER, 1); // 1: undone
+#include "funct_frag.h"
     }
 }
 
@@ -189,27 +146,64 @@ void funct_5(int name) {
         assert(false);
 }
 
+void handle_sigusr(int sig) {
+    LOG("handle sigusr sig=%d", sig);
+
+    // re-block signal
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, sig);
+    sigprocmask(SIG_BLOCK, &set, NULL);
+
+    // tell parent signal is delivered
+    putchar(ACK);
+    fflush(stdout);
+
+    if (sig == SIGUSR3) {
+        // print who's in queue
+        LOG("SIGUSR3");
+    }
+
+    // jump back to current function
+    longjmp(SCHEDULER, S_CONT);
+}
+
+void init_signal() {
+    struct sigaction sa;
+
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGUSR1);
+    sigaddset(&sa.sa_mask, SIGUSR2);
+    sigaddset(&sa.sa_mask, SIGUSR3);
+
+    sa.sa_flags = 0;
+    sa.sa_sigaction = NULL;
+    sa.sa_handler = handle_sigusr;
+
+    sigaction(SIGUSR1, &sa, NULL);;
+    sigaction(SIGUSR2, &sa, NULL);;
+    sigaction(SIGUSR3, &sa, NULL);;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) USAGE();
 
-    int taskid;
-    P      = strtol(argv[1], NULL, 10); if (errno != 0) USAGE();
-    Q      = strtol(argv[2], NULL, 10); if (errno != 0) USAGE();
-    taskid = strtol(argv[3], NULL, 10); if (errno != 0) USAGE();
-    R      = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
+    P = strtol(argv[1], NULL, 10); if (errno != 0) USAGE();
+    Q = strtol(argv[2], NULL, 10); if (errno != 0) USAGE();
+    T = strtol(argv[3], NULL, 10); if (errno != 0) USAGE();
+    R = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
 
+    init_signal();
 
-    if (taskid == 1 || taskid == 2) {
-        // TODO: init link list poter to null
-        //
-        mutex = 0;
-        MAIN = malloc(sizeof(jmp_buf));
+    // TODO: init link list poter to null
 
-        if (setjmp(*MAIN) == 0)
-            funct_5(1);
-        else
-            Scheduler();
-    }
+    mutex = 0;
+    MAIN = malloc(sizeof(jmp_buf));
+
+    if (setjmp(*MAIN) == 0)
+        funct_5(1);
+    else
+        Scheduler();
 
     return 0;
 }
