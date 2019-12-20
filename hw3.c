@@ -1,16 +1,7 @@
 #include "common.h"
 #include "scheduler.h"
 
-#ifdef DEBUG
-# define INTERLEAVE()
-#else
-# define INTERLEAVE() sleep(1)
-#endif
-
-#define SIGUSR3 SIGWINCH
-#define ACK 'A'
-
-// parameter for longjmp to scheduler
+// status parameter for longjmp to scheduler
 #define S_DONE (-2) // task is done
 #define S_CTX  (1)  // context switch
 #define S_OCP  (2)  // lock failed, occupied
@@ -23,7 +14,11 @@ jmp_buf MAIN;
 // reason unknown
 // Update: the problem somehow fixed.
 
-int P, Q, R;
+int P, Q;
+int R;
+// task 1: no use
+// task 2: rounds before context switch
+// task 3: pipe fd for ACK message
 int T; // which task
 
 int mutex; // lock for multiplexing
@@ -53,14 +48,27 @@ FCB_ptr waitQ_pop() {
     return p;
 }
 
+FCB_ptr waitQ_front() {
+    return _waitQ[_waitQh];
+}
+
 int waitQ_count() {
     if (_waitQh <= _waitQt) return _waitQt - _waitQh;
     else return _waitQt - _waitQh + WAITQ_SIZE;
 }
 
+void waitQ_show() {
+    int i = _waitQh;
+    while (i != _waitQt) {
+        printf("%s%d", i == _waitQh ? "" : " ", _waitQ[i]->Name);
+        i = i+1 > WAITQ_SIZE ? 0 : i+1;
+    }
+    printf("\n");
+}
+
 void funct_1(int name) {
     LOG("funct %d init", name);
-    // Note
+    // Note: link list initialization
     Current = Head = malloc(sizeof(FCB));
     Current->Name = name;
     Current->Previous = Current->Next = Current;
@@ -165,17 +173,30 @@ void handle_sigusr(int sig) {
     sigaddset(&set, sig);
     sigprocmask(SIG_BLOCK, &set, NULL);
 
-    // tell parent signal is delivered
-    putchar(ACK);
-    fflush(stdout);
-
-    if (sig == SIGUSR3) {
-        // print who's in queue
+    if (sigismember(&set, SIGUSR3)) {
         LOG("SIGUSR3");
+        // print who's in queue, don't do context switch
+
+        // swap Current and Current->Next
+        // so current function will continue after longjmp
+        Current = Current->Previous;
+//         FCB_ptr a = Current->Previous;
+//         FCB_ptr b = Current;
+//         FCB_ptr c = Current->Next;
+//         FCB_ptr d = Current->Next->Next;
+//         a->Next = c, c->Previous = a;
+//         b->Next = d, d->Previous = b;
+//         c->Next = b, b->Previous = c;
+
+        // print who's in queue
+        waitQ_show();
     }
 
-    // jump back to current function
-    longjmp(SCHEDULER, S_CONT);
+    // tell parent signal is delivered
+    write(R, ACK, sizeof(ACK));
+
+    // jump back to scheduler to do a context switch
+    longjmp(SCHEDULER, S_CTX);
 }
 
 void init_signal() {
@@ -185,6 +206,8 @@ void init_signal() {
     sigaddset(&sa.sa_mask, SIGUSR1);
     sigaddset(&sa.sa_mask, SIGUSR2);
     sigaddset(&sa.sa_mask, SIGUSR3);
+
+    sigprocmask(SIG_BLOCK, &sa.sa_mask, NULL);
 
     sa.sa_flags = 0;
     sa.sa_sigaction = NULL;
@@ -196,19 +219,17 @@ void init_signal() {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) USAGE();
+    init_signal();
+
+    if (argc < 5) USAGE();
 
     P = strtol(argv[1], NULL, 10); if (errno != 0) USAGE();
     Q = strtol(argv[2], NULL, 10); if (errno != 0) USAGE();
     T = strtol(argv[3], NULL, 10); if (errno != 0) USAGE();
     R = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
 
-    init_signal();
-
-    // TODO: init link list poter to null
 
     mutex = 0;
-//     MAIN = malloc(sizeof(jmp_buf));
 
     if (setjmp(MAIN) == 0)
         funct_5(1);
