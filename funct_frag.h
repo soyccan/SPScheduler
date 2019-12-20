@@ -12,7 +12,7 @@
                     INTERLEAVE();
                     arr[idx++] = '0' + name;
                 }
-                if ( (T == 1 || T == 2) && j % R == 0 ) {
+                if (T == 2 && j % R == 0) {
                     // spontaneous context switch
                     mutex = 0;
                     saved_j = j + 1;

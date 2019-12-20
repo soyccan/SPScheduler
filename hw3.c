@@ -16,19 +16,29 @@
 #define S_OCP  (2)  // lock failed, occupied
 #define S_CONT (3)  // back to current function
 
-jmp_buf* MAIN;
+
+jmp_buf MAIN;
 // Note: declare as global variable doesn't work
 // jmp_buf won't store any data after setjmp()
 // reason unknown
+// Update: the problem somehow fixed.
 
 int P, Q, R;
 int T; // which task
 
 int mutex; // lock for multiplexing
 
+// waiting queue, do not access directly
 #define WAITQ_SIZE 10
 FCB_ptr _waitQ[10];
 int _waitQh, _waitQt; // head, tail
+
+// shared with scheduler.o
+int idx;
+char arr[10000];
+jmp_buf SCHEDULER;
+FCB_ptr Current, Head;
+
 
 void waitQ_push(FCB_ptr p) {
     LOG("push FCB %d",p->Name);
@@ -55,7 +65,7 @@ void funct_1(int name) {
     Current->Name = name;
     Current->Previous = Current->Next = Current;
 
-    int saved_j = 1;
+    volatile int saved_j = 1;
 
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
@@ -77,7 +87,7 @@ void funct_2(int name) {
     Head->Previous = new;
     Current = new;
 
-    int saved_j = 1;
+    volatile int saved_j = 1;
 
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
@@ -98,7 +108,7 @@ void funct_3(int name) {
     Head->Previous = new;
     Current = new;
 
-    int saved_j = 1;
+    volatile int saved_j = 1;
 
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
@@ -119,11 +129,11 @@ void funct_4(int name) {
     Head->Previous = new;
     Current = new;
 
-    int saved_j = 1;
+    volatile int saved_j = 1;
 
     if (setjmp(Current->Environment) == 0) {
         LOG("funct %d after setjmp", name);
-        longjmp(*MAIN, 111);// Note
+        longjmp(MAIN, 111);// Note
     }
     else {
 #include "funct_frag.h"
@@ -198,9 +208,9 @@ int main(int argc, char** argv) {
     // TODO: init link list poter to null
 
     mutex = 0;
-    MAIN = malloc(sizeof(jmp_buf));
+//     MAIN = malloc(sizeof(jmp_buf));
 
-    if (setjmp(*MAIN) == 0)
+    if (setjmp(MAIN) == 0)
         funct_5(1);
     else
         Scheduler();
