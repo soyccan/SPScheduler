@@ -64,10 +64,11 @@ void waitQ_show() {
         i = i+1 > WAITQ_SIZE ? 0 : i+1;
     }
     printf("\n");
+    fflush(stdout);
 }
 
 void funct_1(int name) {
-    LOG("funct %d init", name);
+    INFO("funct %d init", name);
     // Note: link list initialization
     Current = Head = malloc(sizeof(FCB));
     Current->Name = name;
@@ -86,7 +87,7 @@ void funct_1(int name) {
 
 
 void funct_2(int name) {
-    LOG("funct %d init", name);
+    INFO("funct %d init", name);
     FCB_ptr new = malloc(sizeof(FCB));
     new->Name = name;
     new->Previous = Current;
@@ -107,7 +108,7 @@ void funct_2(int name) {
 }
 
 void funct_3(int name) {
-    LOG("funct %d init", name);
+    INFO("funct %d init", name);
     FCB_ptr new = malloc(sizeof(FCB));
     new->Name = name;
     new->Previous = Current;
@@ -128,7 +129,7 @@ void funct_3(int name) {
 }
 
 void funct_4(int name) {
-    LOG("funct %d init", name);
+    INFO("funct %d init", name);
     FCB_ptr new = malloc(sizeof(FCB));
     new->Name = name;
     new->Previous = Current;
@@ -150,7 +151,7 @@ void funct_4(int name) {
 
 void funct_5(int name) {
     // dummy function
-    LOG("funct5 name=%d", name);
+    INFO("funct5 name=%d", name);
     int _[10000];
     if (name == 1)
         funct_1(name);
@@ -165,7 +166,7 @@ void funct_5(int name) {
 }
 
 void handle_sigusr(int sig) {
-    LOG("handle sigusr sig=%d", sig);
+    INFO("handle sigusr sig=%d", sig);
 
     // re-block signal
     sigset_t set;
@@ -174,25 +175,16 @@ void handle_sigusr(int sig) {
     sigprocmask(SIG_BLOCK, &set, NULL);
 
     if (sigismember(&set, SIGUSR3)) {
-        LOG("SIGUSR3");
         // print who's in queue, don't do context switch
-
-        // swap Current and Current->Next
-        // so current function will continue after longjmp
-        Current = Current->Previous;
-//         FCB_ptr a = Current->Previous;
-//         FCB_ptr b = Current;
-//         FCB_ptr c = Current->Next;
-//         FCB_ptr d = Current->Next->Next;
-//         a->Next = c, c->Previous = a;
-//         b->Next = d, d->Previous = b;
-//         c->Next = b, b->Previous = c;
-
-        // print who's in queue
+        LOG("hw3 -> main: waitQ");
         waitQ_show();
+
+        // make current function continue after longjmp
+        Current = Current->Previous;
     }
 
     // tell parent signal is delivered
+    LOG("hw3 -> main: %s", ACK);
     write(R, ACK, sizeof(ACK));
 
     // jump back to scheduler to do a context switch
@@ -207,6 +199,7 @@ void init_signal() {
     sigaddset(&sa.sa_mask, SIGUSR2);
     sigaddset(&sa.sa_mask, SIGUSR3);
 
+    // block as fast as possible
     sigprocmask(SIG_BLOCK, &sa.sa_mask, NULL);
 
     sa.sa_flags = 0;
@@ -228,8 +221,10 @@ int main(int argc, char** argv) {
     T = strtol(argv[3], NULL, 10); if (errno != 0) USAGE();
     R = strtol(argv[4], NULL, 10); if (errno != 0) USAGE();
 
-
     mutex = 0;
+
+    setbuf(stdout, NULL);
+    setbuf(stdin, NULL);
 
     if (setjmp(MAIN) == 0)
         funct_5(1);

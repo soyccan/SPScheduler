@@ -16,14 +16,16 @@
 #define G(expr) if ((expr) < 0) { perror(#expr); exit(221); }
 
 #define SIGUSR3 SIGWINCH
-#define ACK "ACK\n"
+#define ACK "ACK"
 
 #ifdef DEBUG
 # define LOG(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
+# define INFO(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 # define ONE_SEC 1
 # define FIVE_SEC 5
 #else
 # define LOG(...)
+# define INFO(...)
 # define ONE_SEC 1
 # define FIVE_SEC 5
 #endif

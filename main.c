@@ -1,7 +1,8 @@
 #include "common.h"
 
 int main() {
-    // TODO: init
+    setbuf(stdin, NULL);
+    setbuf(stdout, NULL);
 
     int P, Q, R;
     int sigQ[12];
@@ -24,9 +25,9 @@ int main() {
         char buf[100];
 
         for (int i = 0; i < R; ++i) {
-            LOG("sigQ[%d]=%d", i,sigQ[i]);
             sleep(FIVE_SEC);
 
+            LOG("sigQ[%d]=%d", i,sigQ[i]);
             int sig;
             if (sigQ[i] == 1) {
                 sig = SIGUSR1;
@@ -43,23 +44,21 @@ int main() {
 
             G(kill(pid, sig));
 
-//             if (sigQ[i] == 3) {
-//                 G(read(pdata[0], buf, sizeof buf));
-//                 LOG("main <- hw3: %s", buf);
-//                 G(write(STDOUT_FILENO, buf, sizeof buf));
-//             }
+            if (sigQ[i] == 3) {
+                G(read(pdata[0], buf, sizeof buf));
+                LOG("main <- hw3 data: %s", buf);
+                strtok(buf, "\n");
+                puts(buf);
+            }
 
             G(read(pmsg[0], buf, sizeof buf));
             LOG("main <- hw3 msg: %s", buf);
-//             assert();
+            assert(strcmp(buf, ACK) == 0);
         }
         G(read(pdata[0], buf, sizeof buf));
         LOG("main <- hw3 data: %s", buf);
-        G(write(STDOUT_FILENO, buf, sizeof buf));
-//         size_t len = 0;
-//         while (len < (sizeof buf) && buf[len] != '\n') ++len;
-//         assert(len < (sizeof buf));
-//         buf[len] = '\0';
+        strtok(buf, "\n");
+        puts(buf);
     }
     else {
         // hw3
