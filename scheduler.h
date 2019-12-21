@@ -6,10 +6,10 @@ extern char arr[10000];
 extern jmp_buf SCHEDULER;
 
 /*The name of each function, funct_5 is the dummy function in the spec.*/
-void funct_1();
-void funct_2();
-void funct_3();
-void funct_4();
+void funct_1(int name);
+void funct_2(int name);
+void funct_3(int name);
+void funct_4(int name);
 void funct_5(int name);
 
 /*FCB_NODE is a function control block. FCB_ptr is a pointer which points to a FCB_NODE */
