@@ -25,8 +25,8 @@ int mutex; // lock for multiplexing
 
 // waiting queue, do not access directly
 #define WAITQ_SIZE 10
-FCB_ptr _waitQ[10];
-int _waitQh, _waitQt; // head, tail
+bool _waitQ[WAITQ_SIZE];
+int _waitQ_sz;
 
 // shared with scheduler.o
 int idx;
@@ -37,32 +37,26 @@ FCB_ptr Current, Head;
 
 void waitQ_push(FCB_ptr p) {
     LOG("push FCB %d",p->Name);
-    _waitQ[_waitQt++] = p;
-    if (_waitQt >= WAITQ_SIZE) _waitQt = 0;
+    ++_waitQ_sz;
+    if (p->Name < WAITQ_SIZE)
+        _waitQ[p->Name] = true;
 }
 
-FCB_ptr waitQ_pop() {
-    FCB_ptr p = _waitQ[_waitQh++];
+void waitQ_pop(FCB_ptr p) {
     LOG("pop FCB %d",p->Name);
-    if (_waitQt >= WAITQ_SIZE) _waitQh = 0;
-    return p;
-}
-
-FCB_ptr waitQ_front() {
-    return _waitQ[_waitQh];
+    --_waitQ_sz;
+    if (p->Name < WAITQ_SIZE)
+        _waitQ[p->Name] = false;
 }
 
 int waitQ_count() {
-    if (_waitQh <= _waitQt) return _waitQt - _waitQh;
-    else return _waitQt - _waitQh + WAITQ_SIZE;
+    return _waitQ_sz;
 }
 
 void waitQ_show() {
-    int i = _waitQh;
-    while (i != _waitQt) {
-        printf("%s%d", i == _waitQh ? "" : " ", _waitQ[i]->Name);
-        i = i+1 > WAITQ_SIZE ? 0 : i+1;
-    }
+    for (int i = 0; i < WAITQ_SIZE; i -=- 1)
+        if (_waitQ[i])
+            printf("%d ", i);
     printf("\n");
     fflush(stdout);
 }

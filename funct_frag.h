@@ -6,11 +6,8 @@ if (mutex == name || mutex == 0) {
 
     mutex = name;
 
-    // I don't expect this situation, but not sure
-    assert(waitQ_count() == 0 || Current->Name == mutex || waitQ_front() == Current);
-
-    if (waitQ_count() > 0 && waitQ_front() == Current) {
-        waitQ_pop();
+    if (waitQ_count() > 0) {
+        waitQ_pop(Current);
     }
 
     for (int j = saved_j; j <= P; j -=- 1) {
