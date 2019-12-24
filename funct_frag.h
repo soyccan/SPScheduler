@@ -30,26 +30,26 @@ if (mutex == name || mutex == 0) {
                 // context switch, without releasing lock
                 saved_j = j + 1;
 
-                sigemptyset(&set);
-                sigaddset(&set, SIGUSR1);
-                sigprocmask(SIG_UNBLOCK, &set, NULL);
+                sigfillset(&set);
+                sigdelset(&set, SIGUSR1);
+                sigsuspend(&set);
             }
             else if (sigismember(&set, SIGUSR2)) {
                 // context switch, releasing lock
                 mutex = 0;
                 saved_j = j + 1;
 
-                sigemptyset(&set);
-                sigaddset(&set, SIGUSR2);
-                sigprocmask(SIG_UNBLOCK, &set, NULL);
+                sigfillset(&set);
+                sigdelset(&set, SIGUSR2);
+                sigsuspend(&set);
             }
             else if (sigismember(&set, SIGUSR3)) {
                 // print who's in queue, don't do context switch
                 saved_j = j + 1;
 
-                sigemptyset(&set);
-                sigaddset(&set, SIGUSR3);
-                sigprocmask(SIG_UNBLOCK, &set, NULL);
+                sigfillset(&set);
+                sigdelset(&set, SIGUSR3);
+                sigsuspend(&set);
             }
         }
     }

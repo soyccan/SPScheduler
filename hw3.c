@@ -8,25 +8,24 @@
 #define S_CONT (3)  // back to current function
 
 
-jmp_buf MAIN;
+static jmp_buf MAIN;
 // Note: declare as global variable doesn't work
 // jmp_buf won't store any data after setjmp()
 // reason unknown
 // Update: the problem somehow fixed.
+static int mutex; // lock for multiplexing
 
-int P, Q;
-int R;
+static int P, Q;
+static int R;
 // task 1: no use
 // task 2: rounds before context switch
 // task 3: pipe fd for ACK message
-int T; // which task
-
-int mutex; // lock for multiplexing
+static int T; // which task
 
 // waiting queue, do not access directly
 #define WAITQ_SIZE 10
-bool _waitQ[WAITQ_SIZE];
-int _waitQ_sz;
+static bool _waitQ[WAITQ_SIZE];
+static int _waitQ_sz;
 
 // shared with scheduler.o
 int idx;
@@ -35,25 +34,25 @@ jmp_buf SCHEDULER;
 FCB_ptr Current, Head;
 
 
-void waitQ_push(FCB_ptr p) {
+static void waitQ_push(FCB_ptr p) {
     LOG("push FCB %d",p->Name);
     ++_waitQ_sz;
     if (p->Name < WAITQ_SIZE)
         _waitQ[p->Name] = true;
 }
 
-void waitQ_pop(FCB_ptr p) {
+static void waitQ_pop(FCB_ptr p) {
     LOG("pop FCB %d",p->Name);
     --_waitQ_sz;
     if (p->Name < WAITQ_SIZE)
         _waitQ[p->Name] = false;
 }
 
-int waitQ_count() {
+static int waitQ_count() {
     return _waitQ_sz;
 }
 
-void waitQ_show() {
+static void waitQ_show() {
     for (int i = 0; i < WAITQ_SIZE; i -=- 1)
         if (_waitQ[i])
             printf("%d ", i);
@@ -159,7 +158,7 @@ void funct_5(int name) {
         assert(false);
 }
 
-void handle_sigusr(int sig) {
+static void handle_sigusr(int sig) {
     INFO("handle sigusr sig=%d", sig);
 
     // re-block signal
@@ -168,7 +167,7 @@ void handle_sigusr(int sig) {
     sigaddset(&set, sig);
     sigprocmask(SIG_BLOCK, &set, NULL);
 
-    if (sigismember(&set, SIGUSR3)) {
+    if (sig == SIGUSR3) {
         // print who's in queue, don't do context switch
         LOG("hw3 -> main: waitQ");
         waitQ_show();
@@ -185,7 +184,7 @@ void handle_sigusr(int sig) {
     longjmp(SCHEDULER, S_CTX);
 }
 
-void init_signal() {
+static void init_signal() {
     struct sigaction sa;
 
     sigemptyset(&sa.sa_mask);
